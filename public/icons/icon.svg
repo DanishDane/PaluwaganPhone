@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="128" fill="#16130F"/>
+  <circle cx="256" cy="256" r="180" fill="#E9B949" stroke="#FFF" stroke-width="12"/>
+  <circle cx="256" cy="256" r="140" fill="none" stroke="#C49B2C" stroke-width="8" stroke-dasharray="14 18"/>
+  <text x="256" y="325" text-anchor="middle" font-family="Georgia, serif" font-size="200" font-weight="bold" fill="#16130F">₱</text>
+  <circle cx="360" cy="150" r="32" fill="#FF4F1A"/>
+</svg>
+

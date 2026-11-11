@@ -1,0 +1,17 @@
+{
+  "name": "PaluPhone",
+  "short_name": "PaluPhone",
+  "description": "iPhone Paluwagan Management Ledger & Customer Portal",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#16130F",
+  "theme_color": "#16130F",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
+
