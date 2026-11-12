@@ -19,35 +19,30 @@ async function init() {
   piso.mount(mascotEl);
   if (localStorage.getItem('palu.piso.hidden') === '1') piso.show(false);
 
-  // Load backend state (setup check & business metadata)
-  const metaPromise = api('/state');
-  try {
-    state.meta = await metaPromise;
-  } catch (err) {
-    console.error('Initial state error:', err);
-    state.meta = { needsSetup: false, business_name: 'PaluPhone', tagline: 'iPhone Paluwagan' };
-  }
-
-  // Run the cinematic 3D startup screen
-  await runBoot(state.meta, metaPromise);
-
-  // Check login
-  const cur = session.get();
-  if (cur && cur.token) {
-    try {
-      state.me = await api('/me');
-    } catch {
-      session.clear();
-      state.me = null;
-    }
-  }
-
   window.addEventListener('hashchange', renderRoute);
   window.addEventListener('palu:logout', logout);
   window.addEventListener('palu:changed', () => renderRoute());
   window.addEventListener('palu:sound', () => updateSoundButtons());
 
-  renderRoute();
+  const prepare = async () => {
+    try {
+      state.meta = await api('/state');
+      const cur = session.get();
+      if (cur?.token) {
+        try { state.me = await api('/me'); }
+        catch (err) {
+          if (err.status !== 401) throw err;
+          session.clear();
+          state.me = null;
+        }
+      }
+      await renderRoute();
+    } catch (err) {
+      appEl.innerHTML = `<main class="auth-page"><div class="auth-card startup-error"><h1 class="display">Unable to connect</h1><p class="muted">${esc(err.message)}</p><button class="btn btn-primary" data-retry>Try again</button></div></main>`;
+      appEl.querySelector('[data-retry]').onclick = () => location.reload();
+    }
+  };
+  await runBoot({ business_name: 'PaluPhone', tagline: 'iPhone Paluwagan' }, prepare());
 }
 
 function updateSoundButtons() {
@@ -67,12 +62,15 @@ function logout() {
 }
 
 async function renderRoute() {
+  if (!state.meta) return;
   disposeScenes();
+  piso.hide();
   const hash = location.hash.replace(/^#\/?/, '');
   const [route, param] = hash.split('/');
 
   // If setup required or not logged in
   if (state.meta?.needsSetup || !state.me) {
+    mascotEl.hidden = true;
     appEl.innerHTML = '<main class="auth-page"></main>';
     const page = appEl.querySelector('.auth-page');
     viewAuth(page, {
@@ -87,6 +85,7 @@ async function renderRoute() {
   }
 
   const role = state.me.role; // 'seller' | 'member'
+  mascotEl.hidden = false;
 
   // Build Shell
   appEl.innerHTML = `
@@ -112,7 +111,7 @@ async function renderRoute() {
         <div class="topbar-right">
           ${role === 'seller' ? `<button class="btn btn-sm btn-primary top-pay-btn" data-top-pay>${I.cash} Hulog</button>` : ''}
           <button class="icon-btn" data-sound-toggle aria-label="Toggle sound">${sfx.muted ? I.soundOff : I.soundOn}</button>
-          <button class="icon-btn danger" data-logout title="Sign out">${I.logout}</button>
+          <button class="icon-btn danger" data-logout title="Sign out" aria-label="Sign out">${I.logout}</button>
         </div>
       </header>
 

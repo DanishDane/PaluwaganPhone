@@ -161,7 +161,7 @@ export async function viewDashboard(page) {
   if (toRelease.length) tips.push({ text: `${toRelease.map((p) => p.name.split(' ')[0]).join(', ')} will receive their iPhone this month! 🎁`, mood: 'grin' });
   if (!d.groups.length) tips.push({ text: 'Start by creating a group — e.g. "iPhone 11, 12 members". I\'ll handle the math!', mood: 'grin', actions: [{ label: 'Create group', onClick: () => groupForm() }] });
   tips.push({ text: `Tip: Due date is every end of month, with a grace period after. Fines apply automatically when it lapses.` });
-  tips.push({ text: 'Drag me anywhere on the screen if I\'m in the way!', mood: 'grin' });
+  tips.push({ text: 'Click me for guidance, or hide me in Settings.', mood: 'grin' });
   piso.setTips(tips);
   if (!sessionStorage.getItem('palu.greeted')) {
     sessionStorage.setItem('palu.greeted', '1');

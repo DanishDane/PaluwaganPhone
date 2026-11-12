@@ -55,8 +55,7 @@ class Piso {
     this.clicks = [];
     this.lastActivity = Date.now();
 
-    const saved = JSON.parse(localStorage.getItem('palu.piso.pos') || 'null');
-    if (saved) this._place(saved.x, saved.y);
+    // Keep Piso in its reserved footer space, clear of forms and navigation.
 
     root.querySelector('.piso-x').addEventListener('click', (e) => { e.stopPropagation(); this.hide(); sfx.close(); });
 
@@ -123,12 +122,10 @@ class Piso {
   }
 
   _place(x, y) {
-    const w = 110, h = 140;
-    x = Math.max(4, Math.min(window.innerWidth - w, x));
-    y = Math.max(4, Math.min(window.innerHeight - h, y));
-    Object.assign(this.el.style, { left: x + 'px', top: y + 'px', right: 'auto', bottom: 'auto' });
+    const w = this.el.offsetWidth;
+    x = Math.max(16, Math.min(window.innerWidth - w - 16, x));
+    Object.assign(this.el.style, { marginLeft: x + 'px', marginRight: '0' });
     this.el.classList.toggle('bubble-right', x < window.innerWidth / 2);
-    this.el.classList.toggle('bubble-below', y < 220);
   }
 
   _wake() {

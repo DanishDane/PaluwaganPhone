@@ -2,13 +2,14 @@
 import { api } from './api.js';
 import { sfx } from './sound.js';
 import { piso } from './mascot.js';
-import { state, track } from './state.js';
+import { state, track, disposeScenes } from './state.js';
 import { I } from './icons.js';
 import { isPro } from './data.js';
 import { PhoneScene } from './three-phone.js';
 import { esc, peso, monthShort, monthLong, dateNice, chip, HEALTH, STATUS, daysBetween, toast } from './ui.js';
 
 export async function viewPortal(page) {
+  disposeScenes();
   const d = await api('/portal');
   state.today = d.today;
   const slotIdx = Number(sessionStorage.getItem('palu.portal.slot') || 0);
@@ -150,7 +151,7 @@ export async function viewPortal(page) {
           <span class="kicker mono">How To Settle Your Hulog</span>
           <h3>Official Payment Channels &amp; Remittance</h3>
         </div>
-        <span class="secure-tag mono">${I.check} Verified Seller Accounts</span>
+        <span class="secure-tag mono">${I.check} Seller Payment Accounts</span>
       </div>
 
       <div class="pay-options-grid">
@@ -158,11 +159,11 @@ export async function viewPortal(page) {
         <div class="pay-box">
           <div class="pay-box-head">
             <span class="pay-badge gcash">GCASH</span>
-            <button class="btn btn-sm btn-ghost" data-copy="${esc(set.gcash_no || '')}">Copy No.</button>
+            <button class="btn btn-sm btn-ghost" data-copy="${esc(set.gcash_no || '')}" ${set.gcash_no ? '' : 'disabled'}>Copy No.</button>
           </div>
           <div class="pay-box-body">
-            <div class="pay-field"><span class="mono small muted">Account Name:</span><b>${esc(set.gcash_name || 'Seller GCash')}</b></div>
-            <div class="pay-field"><span class="mono small muted">Mobile No:</span><b class="mono pay-num">${esc(set.gcash_no || '09XX-XXX-XXXX')}</b></div>
+            <div class="pay-field"><span class="mono small muted">Account Name:</span><b>${esc(set.gcash_name || 'Contact your seller')}</b></div>
+            <div class="pay-field"><span class="mono small muted">Mobile No:</span><b class="mono pay-num">${esc(set.gcash_no || 'Not configured')}</b></div>
           </div>
         </div>
 
@@ -170,11 +171,11 @@ export async function viewPortal(page) {
         <div class="pay-box">
           <div class="pay-box-head">
             <span class="pay-badge maya">MAYA</span>
-            <button class="btn btn-sm btn-ghost" data-copy="${esc(set.maya_no || '')}">Copy No.</button>
+            <button class="btn btn-sm btn-ghost" data-copy="${esc(set.maya_no || '')}" ${set.maya_no ? '' : 'disabled'}>Copy No.</button>
           </div>
           <div class="pay-box-body">
-            <div class="pay-field"><span class="mono small muted">Account Name:</span><b>${esc(set.maya_name || 'Seller Maya')}</b></div>
-            <div class="pay-field"><span class="mono small muted">Mobile No:</span><b class="mono pay-num">${esc(set.maya_no || '09XX-XXX-XXXX')}</b></div>
+            <div class="pay-field"><span class="mono small muted">Account Name:</span><b>${esc(set.maya_name || 'Contact your seller')}</b></div>
+            <div class="pay-field"><span class="mono small muted">Mobile No:</span><b class="mono pay-num">${esc(set.maya_no || 'Not configured')}</b></div>
           </div>
         </div>
 
@@ -182,11 +183,11 @@ export async function viewPortal(page) {
         <div class="pay-box">
           <div class="pay-box-head">
             <span class="pay-badge bank">BANK TRANSFER</span>
-            <button class="btn btn-sm btn-ghost" data-copy="${esc(set.bank_acc || '')}">Copy Acc</button>
+            <button class="btn btn-sm btn-ghost" data-copy="${esc(set.bank_acc || '')}" ${set.bank_acc ? '' : 'disabled'}>Copy Acc</button>
           </div>
           <div class="pay-box-body">
-            <div class="pay-field"><span class="mono small muted">Bank:</span><b>${esc(set.bank_name || 'BDO / BPI')}</b></div>
-            <div class="pay-field"><span class="mono small muted">Account No:</span><b class="mono pay-num">${esc(set.bank_acc || 'XXXX-XXXX-XXXX')}</b></div>
+            <div class="pay-field"><span class="mono small muted">Bank:</span><b>${esc(set.bank_name || 'Contact your seller')}</b></div>
+            <div class="pay-field"><span class="mono small muted">Account No:</span><b class="mono pay-num">${esc(set.bank_acc || 'Not configured')}</b></div>
           </div>
         </div>
       </div>
@@ -203,7 +204,7 @@ export async function viewPortal(page) {
         <div class="card-head">
           <div>
             <span class="kicker mono">Payment History &amp; Schedule</span>
-            <h3>12-Month Paluwagan Timeline</h3>
+            <h3>${g.slots}-Month Paluwagan Timeline</h3>
           </div>
           <span class="mono small muted">${s.paidCount} of ${s.totalPeriods} Completed</span>
         </div>
@@ -228,15 +229,15 @@ export async function viewPortal(page) {
           <div class="rule-item">
             <span class="rule-num mono">02</span>
             <div>
-              <b>5-Day Grace Extension</b>
-              <p>You may pay up to the 5th day of the next month with zero late fees or penalties.</p>
+              <b>${g.grace_days}-Day Grace Extension</b>
+              <p>${g.grace_days ? `You may pay within ${g.grace_days} days after month-end without late fees.` : 'Payments are due at month-end. This group has no grace extension.'}</p>
             </div>
           </div>
           <div class="rule-item">
             <span class="rule-num mono">03</span>
             <div>
               <b>Late Fine: ${peso(g.fine_amount)}${g.fine_per_day ? ` + ${peso(g.fine_per_day)}/day` : ''}</b>
-              <p>Applied strictly if payment exceeds the 5-day grace period to protect the entire group.</p>
+              <p>Applies after this group's ${g.grace_days}-day grace period.</p>
             </div>
           </div>
           <div class="rule-item">

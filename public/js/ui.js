@@ -47,20 +47,24 @@ export function toast(msg, type = 'ok') {
 }
 
 // ---------- modal ----------
+let dialogSequence = 0;
 export function modal({ title, kicker = '', body, wide = false, receipt = false, onMount }) {
   const root = $('#modal-root');
+  const previousFocus = document.activeElement;
+  const titleId = `dialog-${Date.now()}-${++dialogSequence}`;
   const wrap = document.createElement('div');
   wrap.className = 'modal-wrap';
   wrap.innerHTML = `
     <div class="modal-backdrop"></div>
-    <div class="modal ${wide ? 'modal-wide' : ''} ${receipt ? 'modal-receipt' : ''}" role="dialog" aria-modal="true">
+    <div class="modal ${wide ? 'modal-wide' : ''} ${receipt ? 'modal-receipt' : ''}" role="dialog" aria-modal="true" aria-labelledby="${titleId}" tabindex="-1">
       <header class="modal-head">
-        <div>${kicker ? `<div class="kicker">${esc(kicker)}</div>` : ''}<h3>${title}</h3></div>
+        <div>${kicker ? `<div class="kicker">${esc(kicker)}</div>` : ''}<h3 id="${titleId}">${title}</h3></div>
         <button class="icon-btn modal-close" aria-label="Close">✕</button>
       </header>
       <div class="modal-body">${body}</div>
     </div>`;
   root.appendChild(wrap);
+  $('#app').inert = true;
   sfx.open();
   requestAnimationFrame(() => wrap.classList.add('in'));
   let closed = false;
@@ -71,16 +75,32 @@ export function modal({ title, kicker = '', body, wide = false, receipt = false,
     wrap.classList.remove('in');
     wrap.classList.add('out');
     document.removeEventListener('keydown', onKey);
-    setTimeout(() => wrap.remove(), 320);
+    setTimeout(() => {
+      wrap.remove();
+      if (!root.children.length) $('#app').inert = false;
+      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+    }, 320);
   };
-  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  const onKey = (e) => {
+    if (wrap !== root.lastElementChild) return;
+    if (e.key === 'Escape') { e.preventDefault(); close(); }
+    if (e.key === 'Tab') {
+      const controls = [...el.querySelectorAll('button, a[href], input, select, textarea, [tabindex="0"]')].filter(item => !item.disabled && item.getClientRects().length);
+      const first = controls[0], last = controls.at(-1);
+      if (!first) { e.preventDefault(); el.focus(); }
+      else if (e.shiftKey && (document.activeElement === first || document.activeElement === el)) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  };
   document.addEventListener('keydown', onKey);
   wrap.querySelector('.modal-backdrop').addEventListener('click', close);
   wrap.querySelector('.modal-close').addEventListener('click', close);
   const el = wrap.querySelector('.modal');
   if (onMount) onMount(el, close);
   const first = el.querySelector('input:not([type=hidden]):not([readonly]), select, textarea');
-  if (first && window.innerWidth > 700) setTimeout(() => first.focus(), 250);
+  setTimeout(() => {
+    if (!closed && el.isConnected) (first && window.innerWidth > 700 ? first : el).focus({ preventScroll: true });
+  }, 250);
   return { el, close };
 }
 

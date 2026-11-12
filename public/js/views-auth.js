@@ -2,7 +2,7 @@
 import { api, session } from './api.js';
 import { sfx } from './sound.js';
 import { piso } from './mascot.js';
-import { state, track } from './state.js';
+import { state, track, disposeScenes } from './state.js';
 import { I } from './icons.js';
 import { PhoneScene } from './three-phone.js';
 import { esc, toast, busy } from './ui.js';
@@ -11,6 +11,7 @@ export function viewAuth(page, { needsSetup = false, onLogin }) {
   let role = 'seller'; // 'seller' | 'member'
 
   const render = () => {
+    disposeScenes();
     if (needsSetup) {
       page.innerHTML = `
         <div class="auth-wrap">
@@ -48,6 +49,7 @@ export function viewAuth(page, { needsSetup = false, onLogin }) {
       const f = page.querySelector('#setupForm');
       f.onsubmit = (e) => {
         e.preventDefault();
+        if (!f.reportValidity()) return;
         const d = {
           business_name: f.business_name.value.trim(),
           name: f.name.value.trim(),
@@ -124,6 +126,7 @@ export function viewAuth(page, { needsSetup = false, onLogin }) {
       const f = page.querySelector('#loginForm');
       f.onsubmit = (e) => {
         e.preventDefault();
+        if (!f.reportValidity()) return;
         const d = { role };
         if (role === 'seller') {
           d.username = f.username.value.trim();

@@ -1,5 +1,5 @@
 // PaluPhone — iPhone Paluwagan management server
-// Run: npm start  (Node 22.5+ required for built-in SQLite)
+// Run: npm start (Node 22.13+ required for built-in SQLite)
 
 const express = require('express');
 const path = require('path');
@@ -10,6 +10,8 @@ const { DatabaseSync } = require('node:sqlite');
 const L = require('./lib/ledger');
 
 const PORT = Number(process.env.PORT) || 3000;
+const SESSION_HOURS = Number(process.env.SESSION_HOURS || 12);
+if (!Number.isFinite(SESSION_HOURS) || SESSION_HOURS <= 0) throw new Error('SESSION_HOURS must be a positive number.');
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const DB_FILE = path.join(DATA_DIR, 'paluphone.db');
@@ -73,12 +75,12 @@ function getSettings() {
     default_fine_per_day: '0',
     currency: 'PHP',
     tagline: 'iPhone Paluwagan',
-    gcash_name: 'DANISH STORE',
-    gcash_no: '0917-123-4567',
-    maya_name: 'DANISH STORE',
-    maya_no: '0917-123-4567',
-    bank_name: 'BDO / BPI',
-    bank_acc: '1234-5678-9012',
+    gcash_name: '',
+    gcash_no: '',
+    maya_name: '',
+    maya_no: '',
+    bank_name: '',
+    bank_acc: '',
     payment_instructions: 'Please send your proof of payment or screenshot via SMS or Viber once paid so the seller can verify and record your official receipt.'
   };
   for (const r of all('SELECT key, value FROM settings')) s[r.key] = r.value;
@@ -164,7 +166,19 @@ function enrichGroup(g, data, today) {
 // ---------- app ----------
 const app = express();
 app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'same-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (req.path.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
+  next();
+});
 app.use(express.json({ limit: '1mb' }));
+app.get('/healthz', (req, res) => {
+  try { db.prepare('SELECT 1').get(); res.json({ status: 'ok' }); }
+  catch { res.status(503).json({ status: 'unavailable' }); }
+});
 
 // Static: app shell + vendored libs (works fully offline)
 app.use('/vendor/three', express.static(path.join(__dirname, 'node_modules/three')));
@@ -189,6 +203,10 @@ function auth(role) {
     const token = h.startsWith('Bearer ') ? h.slice(7) : '';
     const s = token && one('SELECT * FROM sessions WHERE token = ?', token);
     if (!s) return res.status(401).json({ error: 'Please log in again.' });
+    if (Date.now() - Date.parse(s.created) >= SESSION_HOURS * 3600000) {
+      run('DELETE FROM sessions WHERE token = ?', token);
+      return res.status(401).json({ error: 'Your session has expired. Please sign in again.' });
+    }
     if (role && s.role !== role) return res.status(403).json({ error: 'Not allowed.' });
     req.session = s;
     next();
@@ -217,6 +235,7 @@ api.post('/setup', wrap((req) => {
 
 const attempts = new Map();
 function throttle(key) {
+  for (const [k, value] of attempts) if (Date.now() - value.t > 10 * 60 * 1000) attempts.delete(k);
   const a = attempts.get(key) || { n: 0, t: Date.now() };
   if (Date.now() - a.t > 10 * 60 * 1000) { a.n = 0; a.t = Date.now(); }
   a.n++;
@@ -642,7 +661,11 @@ api.get('/portal', auth('member'), wrap((req) => {
 app.use('/api', api);
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 // SPA fallback
-app.get(/^\/(?!api|vendor|fonts).*/, (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get(/^\/(?!api|vendor|fonts).*/, (req, res) => {
+  if (path.extname(req.path)) return res.sendStatus(404);
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 app.use((err, req, res, next) => {
   const status = err.status || (err.type === 'entity.parse.failed' ? 400 : 500);
@@ -650,9 +673,16 @@ app.use((err, req, res, next) => {
   res.status(status).json({ error: status >= 500 ? 'Something went wrong on the server.' : err.message });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, process.env.HOST || '0.0.0.0', () => {
   const ips = Object.values(os.networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => i.address);
   console.log(`\n  PaluPhone is running\n  ➜ This computer:  http://localhost:${PORT}`);
   for (const ip of ips) console.log(`  ➜ Phones on Wi-Fi: http://${ip}:${PORT}`);
   console.log('');
 });
+
+function shutdown() {
+  server.close(() => { db.close(); process.exit(0); });
+  setTimeout(() => process.exit(1), 10000).unref();
+}
+process.once('SIGTERM', shutdown);
+process.once('SIGINT', shutdown);

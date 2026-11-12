@@ -1,5 +1,8 @@
 # PaluPhone — iPhone Paluwagan Management System & Member Portal
 
+For production startup, responsive behavior, administrator/member instructions,
+hosting configuration, and backups, see [DEPLOYMENT.md](DEPLOYMENT.md).
+
 A full-stack, responsive web application designed for iPhone Paluwagan businesses. Handles monthly hulog collection, due dates, grace periods, automated late fines, and turn-based device releases with an interactive 3D UI, Web Audio sound effects, and an interactive mascot.
 
 ---
@@ -65,5 +68,5 @@ A full-stack, responsive web application designed for iPhone Paluwagan businesse
 
 | Role | Username / Mobile | Password / PIN | Description |
 |---|---|---|---|
-| **Seller / Admin** | `admin` | `admin123` | Full dashboard access |
+| **Seller / Admin** | `admin` | `admin123` | Seeded development account only |
 | **Member** | `09171234501` | `1234` | Maria Santos (iPhone 11 Batch 1) |
