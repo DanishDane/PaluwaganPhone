@@ -1268,14 +1268,6 @@ input:focus, select:focus, textarea:focus {
 }
 .boot.gone { display: none; }
 .boot-top { display: flex; justify-content: space-between; align-items: center; z-index: 2; }
-.boot-skip {
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #F3EEE3;
-  padding: 6px 14px;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-}
 .boot-stage {
   position: absolute;
   inset: 0;
@@ -1804,7 +1796,6 @@ button:disabled { opacity: .6; cursor: not-allowed; }
 .boot { padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left)); }
 .boot-top { gap: 16px; }
 .boot-top > span { min-width: 0; overflow-wrap: anywhere; }
-.boot-skip { flex-shrink: 0; min-height: 44px; }
 .boot-stage { inset: 70px 0 20%; }
 .boot-title { margin-top: auto; font-size: clamp(2.5rem, 9vw, 8rem); line-height: 1.1; overflow-wrap: anywhere; }
 .boot.leaving { pointer-events: none; transition: opacity .6s ease; transform: none; }
