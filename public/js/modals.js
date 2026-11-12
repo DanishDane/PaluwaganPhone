@@ -5,6 +5,8 @@ import { piso } from './mascot.js';
 import { state } from './state.js';
 import { I } from './icons.js';
 import { IPHONES, STORAGE, COLORS, METHODS } from './data.js';
+import { proofField, wireProofInput, viewProof } from './payment-proofs.js';
+import { correctRelease } from './monthly-draw.js';
 import { esc, peso, monthShort, monthLong, dateNice, chip, HEALTH, STATUS, toast, modal, confirmBox, formData, busy, confetti, stamp, initials } from './ui.js';
 
 export const changed = () => window.dispatchEvent(new Event('palu:changed'));
@@ -134,7 +136,7 @@ export function memberForm(group, existing = null, preferredOrder = null) {
   for (let i = 1; i <= group.slots; i++) {
     const ym = addMonths(group.start_month, i - 1);
     const holder = (group.members || []).find((x) => x.payout_order === i && x.id !== m.id);
-    if (existing || !taken.has(i)) orders.push(`<option value="${i}" ${(m.payout_order || preferredOrder) === i ? 'selected' : ''}>#${i} · ${monthShort(ym)}${holder ? ` (swap with ${esc(holder.name)})` : ''}</option>`);
+    if (existing || !taken.has(i)) orders.push(`<option value="${i}" ${(m.payout_order || preferredOrder) === i ? 'selected' : ''}>Member slot #${i}${holder ? ` (swap with ${esc(holder.name)})` : ''}</option>`);
   }
   const genPin = () => String(Math.floor(1000 + Math.random() * 9000));
   modal({
@@ -147,7 +149,7 @@ export function memberForm(group, existing = null, preferredOrder = null) {
         <label class="field"><span>Mobile number</span><input name="phone" type="tel" inputmode="tel" value="${esc(m.phone || '')}" placeholder="09XX XXX XXXX" required/></label>
         <label class="field"><span>Login PIN ${existing ? '<em>leave blank to keep</em>' : ''}</span><div class="input-btn"><input name="pin" inputmode="numeric" maxlength="6" pattern="\\d*" value="${existing ? '' : genPin()}" placeholder="4–6 digits"/><button type="button" class="btn btn-ghost btn-sm" data-gen>${I.replay}</button></div></label>
       </div>
-      <label class="field"><span>Payout turn — the month they receive the iPhone</span><select name="payout_order">${orders.join('')}</select></label>
+      <label class="field"><span>Member slot <em>release month is decided by the monthly draw</em></span><select name="payout_order">${orders.join('')}</select></label>
       <label class="field"><span>Address <em>optional</em></span><input name="address" value="${esc(m.address || '')}" placeholder="Barangay, City"/></label>
       <label class="field"><span>Notes <em>optional</em></span><textarea name="notes" rows="2">${esc(m.notes || '')}</textarea></label>
       <div class="form-actions"><button type="button" class="btn btn-ghost" data-cancel>Cancel</button><button type="submit" class="btn btn-primary">${existing ? 'Save' : 'Add member'}</button></div>
@@ -170,7 +172,7 @@ export function memberForm(group, existing = null, preferredOrder = null) {
             sfx.success();
             toast(existing ? 'Member updated' : `${d.name} added`);
             if (!existing || d.pin) credentialsModal(d.name, d.phone, d.pin);
-            if (!existing) piso.say(`Welcome sa group, ${d.name.split(' ')[0]}! Turn #${d.payout_order} ang payout niya.`, { mood: 'grin' });
+            if (!existing) piso.say(`Welcome sa group, ${d.name.split(' ')[0]}! Included na sa monthly draw kapag verified na ang hulog ng lahat.`, { mood: 'grin' });
             changed();
           } catch (err) {
             toast(err.message, 'err');
@@ -195,7 +197,7 @@ function credentialsModal(name, phone, pin) {
         <div class="cred-row"><span class="mono">MOBILE</span><b>${esc(phone)}</b></div>
         <div class="cred-row"><span class="mono">PIN</span><b class="cred-pin">${esc(pin)}</b></div>
       </div>
-      <p class="muted small">Members can check their payments, due dates and payout month using this login. The PIN is stored securely and can't be viewed again — reset it anytime.</p>
+      <p class="muted small">Members can check payments, due dates and draw/release status using this login. The PIN is stored securely and can't be viewed again — reset it anytime.</p>
       <div class="form-actions"><a class="btn btn-ghost" href="sms:${esc(phone)}?body=${encodeURIComponent(text)}">${I.sms} Send via SMS</a><button class="btn btn-primary" data-copy>Copy details</button></div>`,
     onMount(el, close) {
       el.querySelector('[data-copy]').onclick = async () => {
@@ -235,9 +237,10 @@ export async function paymentModal({ member_id = null, period = null } = {}) {
         <label class="field"><span>Fine paid (₱)</span><input type="number" name="fine" min="0" step="any" inputmode="decimal" value="0"/></label>
       </div>
       <div class="row2">
-        <label class="field"><span>Reference # <em>optional</em></span><input name="ref" placeholder="GCash ref no."/></label>
+        <label class="field"><span>Reference # <em>required for non-cash payments</em></span><input name="ref" placeholder="GCash ref no."/></label>
         <label class="field"><span>Note <em>optional</em></span><input name="note"/></label>
       </div>
+      ${proofField()}
       <div class="receipt-sum"></div>
       <div class="form-actions"><button type="button" class="btn btn-ghost" data-cancel>Cancel</button><button type="submit" class="btn btn-primary" disabled>${I.check} Record payment</button></div>
     </form>`,
@@ -245,6 +248,14 @@ export async function paymentModal({ member_id = null, period = null } = {}) {
       const f = el.querySelector('form');
       const sum = el.querySelector('.receipt-sum');
       const submit = f.querySelector('[type=submit]');
+      const readProof = wireProofInput(el);
+      const proofInput = el.querySelector('[data-proof-file]');
+      const updateProofRequirement = () => {
+        proofInput.required = f.method.value !== 'Cash';
+        f.ref.required = f.method.value !== 'Cash';
+      };
+      f.method.addEventListener('change', updateProofRequirement);
+      updateProofRequirement();
       el.querySelector('[data-cancel]').onclick = close;
       let detail = null;
       let quote = null;
@@ -309,10 +320,12 @@ export async function paymentModal({ member_id = null, period = null } = {}) {
 
       f.addEventListener('submit', (e) => {
         e.preventDefault();
+        if (!f.reportValidity()) return;
         const d = formData(f);
         busy(submit, async () => {
           try {
-            await api('/payments', { method: 'POST', body: d });
+            d.proof = await readProof();
+            await api('/payments', { method: 'POST', body: d, timeout: 60000 });
             close();
             const full = Number(d.amount) >= (quote ? quote.balance : 0) - 0.005 && Number(d.amount) > 0;
             stamp(full ? 'PAID' : Number(d.amount) > 0 ? 'PARTIAL' : 'FINE PAID', full ? 'var(--green)' : 'var(--accent)');
@@ -361,12 +374,12 @@ export async function memberDetail(id) {
 
   const pays = m.periods.flatMap((p) => p.payments).sort((a, b) => (a.paid_on < b.paid_on ? 1 : -1));
   const payRows = pays.length ? pays.map((p) => `
-    <tr><td>${dateNice(p.paid_on)}</td><td>${monthShort(p.period)}</td><td class="num">${peso(p.amount)}</td><td class="num">${p.fine ? peso(p.fine) : '—'}</td><td>${esc(p.method || '')}${p.ref ? ` <span class="muted mono small">#${esc(p.ref)}</span>` : ''}</td><td><button class="icon-btn danger" data-delpay="${p.id}" title="Void payment">${I.trash}</button></td></tr>`).join('')
+    <tr><td>${dateNice(p.paid_on)}</td><td>${monthShort(p.period)}</td><td class="num">${peso(p.amount)}</td><td class="num">${p.fine ? peso(p.fine) : '—'}</td><td>${esc(p.method || '')}${p.ref ? ` <span class="muted mono small">#${esc(p.ref)}</span>` : ''}${p.proof_id ? `<button class="btn btn-ghost btn-sm" data-proof="${p.proof_id}">View receipt</button>` : ''}</td><td><button class="icon-btn danger" data-delpay="${p.id}" title="Void payment">${I.trash}</button></td></tr>`).join('')
     : `<tr><td colspan="6" class="muted center">No payments yet.</td></tr>`;
 
   modal({
     title: esc(m.name),
-    kicker: `${g.name} · Turn #${m.payout_order}`,
+    kicker: `${g.name} · Member #${m.payout_order}`,
     wide: true,
     body: `
       <div class="md-head">
@@ -390,9 +403,9 @@ export async function memberDetail(id) {
       </div>
       <div class="payout-strip ${s.payoutReleased ? 'done' : ''}">
         <div>${I.gift}</div>
-        <div><b>${s.payoutReleased ? `iPhone released ${dateNice(s.payout.released_on)}` : `Receives iPhone on ${monthLong(s.payoutPeriod)}`}</b>
-        <div class="muted small">${s.payoutReleased ? (s.payout.imei ? `IMEI/Serial: ${esc(s.payout.imei)}` : 'No IMEI recorded') : `Payout turn #${m.payout_order} of ${g.slots}`}</div></div>
-        <div>${s.payoutReleased ? `<button class="btn btn-sm btn-ghost" data-unrelease>Undo</button>` : `<button class="btn btn-sm btn-ink" data-release>Mark released</button>`}</div>
+        <div><b>${s.payoutReleased ? `iPhone released ${dateNice(s.payout.released_on)}` : s.payoutSelected ? `Selected for ${monthLong(s.payoutPeriod)} · awaiting release` : 'Awaiting monthly draw'}</b>
+        <div class="muted small">${s.payoutReleased ? (s.payout.imei ? `IMEI/Serial: ${esc(s.payout.imei)}` : 'No IMEI recorded') : s.payoutSelected ? 'Excluded from future draws. Monthly payments continue.' : 'Eligible until selected or released.'}</div></div>
+        <div>${s.payoutReleased ? `<button class="btn btn-sm btn-ghost" data-unrelease>Correct release</button>` : s.payoutSelected ? `<button class="btn btn-sm btn-ink" data-release>Mark released</button>` : ''}</div>
       </div>
       <div class="md-cols">
         <div><h4 class="sec-title">Monthly timeline</h4><div class="timeline">${rows}</div></div>
@@ -401,6 +414,7 @@ export async function memberDetail(id) {
       </div>`,
     onMount(el, close) {
       const reopen = () => { close(); changed(); setTimeout(() => memberDetail(id), 340); };
+      el.querySelectorAll('[data-proof]').forEach(button => { button.onclick = () => viewProof(button.dataset.proof); });
       el.querySelectorAll('[data-pay]').forEach((b) => (b.onclick = () => { close(); paymentModal({ member_id: m.id, period: b.dataset.pay }); }));
       el.querySelectorAll('[data-waive]').forEach((b) => (b.onclick = async () => {
         if (!(await confirmBox({ title: 'Waive this fine?', text: `The late fine for ${monthLong(b.dataset.waive)} will be removed.`, ok: 'Waive fine' }))) return;
@@ -424,10 +438,7 @@ export async function memberDetail(id) {
       const rel = el.querySelector('[data-release]');
       if (rel) rel.onclick = () => { close(); payoutModal(m); };
       const unrel = el.querySelector('[data-unrelease]');
-      if (unrel) unrel.onclick = async () => {
-        if (!(await confirmBox({ title: 'Undo iPhone release?', text: 'This only removes the release record.', ok: 'Undo' }))) return;
-        try { await api(`/payouts/${m.id}`, { method: 'DELETE' }); reopen(); } catch (e) { toast(e.message, 'err'); }
-      };
+      if (unrel) unrel.onclick = () => correctRelease(m.id, reopen);
     },
   });
 }
@@ -437,7 +448,7 @@ export function payoutModal(m) {
   const s = m.summary;
   modal({
     title: 'Release <em>iPhone</em>',
-    kicker: `${m.name} · Turn #${m.payout_order}`,
+    kicker: `${m.name} · ${s.payoutPeriod ? monthLong(s.payoutPeriod) + ' winner' : 'Monthly draw'}`,
     receipt: true,
     body: `
       <form class="form">

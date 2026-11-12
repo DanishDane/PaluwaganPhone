@@ -6,6 +6,8 @@ import { state, track, go, greeting } from './state.js';
 import { I } from './icons.js';
 import { isPro } from './data.js';
 import { PhoneScene } from './three-phone.js';
+import { reviewSubmission, submissionStatus, viewProof } from './payment-proofs.js';
+import { mountMonthlyDraw } from './monthly-draw.js';
 import { esc, peso, monthShort, monthLong, dateNice, chip, HEALTH, STATUS, toast, confirmBox, formData, busy, countUp, wireTilt, empty, initials, daysBetween } from './ui.js';
 import { groupForm, memberForm, paymentModal, memberDetail, payoutModal, addMonths } from './modals.js';
 
@@ -117,10 +119,10 @@ export async function viewDashboard(page) {
       }).join('')}</ul>` : `<div class="empty-sm">${I.clock}<span>Nobody in grace period right now.</span></div>`}
     </div>
     <div class="card" data-reveal>
-      <div class="card-head"><h3><span class="dot dot-gold"></span>Payouts this month</h3><span class="mono muted small">${monthShort(ym)}</span></div>
+      <div class="card-head"><h3><span class="dot dot-gold"></span>Awaiting release</h3><span class="mono muted small">${d.payoutsDue.length} selected</span></div>
       ${d.payoutsDue.length ? `<ul class="plist">${d.payoutsDue.map((o) => `
         <li data-member="${o.id}"><div class="avatar sm gold">${I.gift}</div><div class="pl-main"><b>${esc(o.name)}</b><small class="muted">${esc(o.model)} · ${esc(o.group)}</small></div>
-        <div class="pl-amt">${o.released ? '<span class="chip st-paid"><i></i>Released</span>' : '<span class="chip st-current"><i></i>To release</span>'}</div></li>`).join('')}</ul>` : `<div class="empty-sm">${I.gift}<span>No iPhone payouts scheduled this month.</span></div>`}
+        <div class="pl-amt">${o.released ? '<span class="chip st-paid"><i></i>Released</span>' : '<span class="chip st-current"><i></i>To release</span>'}</div></li>`).join('')}</ul>` : `<div class="empty-sm">${I.gift}<span>No winners waiting for device release.</span></div>`}
     </div>
   </section>
 
@@ -158,7 +160,7 @@ export async function viewDashboard(page) {
   if (d.overdue.length) tips.push({ text: `${d.overdue.length} member${d.overdue.length > 1 ? 's are' : ' is'} overdue. Top: ${d.overdue[0].name} — ${peso(d.overdue[0].owed + d.overdue[0].fine)}. Remind natin?`, mood: 'worried', actions: [{ label: 'Open member', onClick: () => memberDetail(d.overdue[0].id) }] });
   if (d.grace.length) tips.push({ text: `${d.grace.length} member${d.grace.length > 1 ? 's' : ''} still in grace period — wala pang fine, pero malapit na!`, mood: 'wow' });
   const toRelease = d.payoutsDue.filter((p) => !p.released);
-  if (toRelease.length) tips.push({ text: `${toRelease.map((p) => p.name.split(' ')[0]).join(', ')} will receive their iPhone this month! 🎁`, mood: 'grin' });
+  if (toRelease.length) tips.push({ text: `${toRelease.map((p) => p.name.split(' ')[0]).join(', ')} won a draw and are waiting for device release. 🎁`, mood: 'grin' });
   if (!d.groups.length) tips.push({ text: 'Start by creating a group — e.g. "iPhone 11, 12 members". I\'ll handle the math!', mood: 'grin', actions: [{ label: 'Create group', onClick: () => groupForm() }] });
   tips.push({ text: `Tip: Due date is every end of month, with a grace period after. Fines apply automatically when it lapses.` });
   tips.push({ text: 'Click me for guidance, or hide me in Settings.', mood: 'grin' });
@@ -222,6 +224,7 @@ export async function viewGroups(page) {
 // ======================= GROUP DETAIL =======================
 export async function viewGroup(page, id) {
   const g = await api(`/groups/${id}`);
+  if (!page.isConnected) return;
   const ym = state.today ? state.today.slice(0, 7) : new Date().toISOString().slice(0, 7);
   const tab = sessionStorage.getItem('palu.gtab') || 'board';
   const byOrder = {};
@@ -244,7 +247,7 @@ export async function viewGroup(page, id) {
   for (let i = 1; i <= g.slots; i++) {
     const m = byOrder[i];
     if (!m) {
-      rowsHtml.push(`<tr class="open-row"><td class="sticky"><div class="mrow"><div class="avatar sm ghost">#${i}</div><div><b class="muted">Open slot</b><small class="mono muted">payout ${monthShort(addMonths(g.start_month, i - 1))}</small></div></div></td><td colspan="${g.slots + 1}"><button class="btn btn-sm btn-ghost" data-addat="${i}">${I.plus} Add member to slot #${i}</button></td></tr>`);
+      rowsHtml.push(`<tr class="open-row"><td class="sticky"><div class="mrow"><div class="avatar sm ghost">#${i}</div><div><b class="muted">Open slot</b><small class="mono muted">monthly draw entry</small></div></div></td><td colspan="${g.slots + 1}"><button class="btn btn-sm btn-ghost" data-addat="${i}">${I.plus} Add member to slot #${i}</button></td></tr>`);
       continue;
     }
     rowsHtml.push(`<tr>
@@ -254,15 +257,7 @@ export async function viewGroup(page, id) {
     </tr>`);
   }
 
-  const payoutRows = g.periods.map((p) => {
-    const m = byOrder[p.index];
-    return `<div class="po-row ${p.period === ym ? 'now' : ''} ${m && m.summary.payoutReleased ? 'done' : ''}">
-      <div class="po-idx mono">${String(p.index).padStart(2, '0')}</div>
-      <div class="po-month"><b>${monthLong(p.period)}</b><small class="muted mono">${p.period < ym ? 'past' : p.period === ym ? 'this month' : 'upcoming'}</small></div>
-      <div class="po-who">${m ? `<button class="link-btn" data-member="${m.id}">${esc(m.name)}</button>` : '<span class="muted">— open slot —</span>'}</div>
-      <div class="po-act">${m ? (m.summary.payoutReleased ? `<span class="chip st-paid"><i></i>Released ${dateNice(m.summary.payout.released_on)}</span>` : `<button class="btn btn-sm ${p.period <= ym ? 'btn-ink' : 'btn-ghost'}" data-release="${m.id}">${I.gift} Release iPhone</button>`) : ''}</div>
-    </div>`;
-  }).join('');
+  const payoutRows = g.members.map(m => `<div class="po-row ${m.summary.payoutReleased ? 'done' : ''}"><div class="po-idx mono">#${m.payout_order}</div><div class="po-who"><button class="link-btn" data-member="${m.id}">${esc(m.name)}</button><small class="muted block">${m.summary.payoutPeriod ? `Selected for ${monthLong(m.summary.payoutPeriod)}` : 'Awaiting monthly draw'}</small></div><div class="po-act">${m.summary.payoutReleased ? `<span class="chip st-paid">Released ${dateNice(m.summary.payout.released_on)}</span>` : m.summary.payoutSelected ? `<button class="btn btn-sm btn-primary" data-release="${m.id}">Mark released</button>` : '<span class="chip st-current">Eligible for draw</span>'}</div></div>`).join('');
 
   page.innerHTML = `
     <a href="#/groups" class="back-link mono">${I.back} All groups</a>
@@ -293,9 +288,11 @@ export async function viewGroup(page, id) {
       <div class="g-hero-3d" id="g3d"><div class="coin-tip mono"></div><div class="hint mono">drag to spin · hover coins</div></div>
     </section>
 
+    <section class="card monthly-draw-card" data-monthly-draw></section>
+
     <div class="seg">
       <button data-tab="board" class="${tab === 'board' ? 'on' : ''}">Payment board</button>
-      <button data-tab="payouts" class="${tab === 'payouts' ? 'on' : ''}">Payout schedule</button>
+      <button data-tab="payouts" class="${tab === 'payouts' ? 'on' : ''}">Release status</button>
       <button data-tab="rules" class="${tab === 'rules' ? 'on' : ''}">Rules</button>
     </div>
 
@@ -316,13 +313,17 @@ export async function viewGroup(page, id) {
           <li>Payment is due <b>every end of the month</b> (e.g. ${dateNice(g.periods[0].due)}).</li>
           <li>There is a <b>${g.grace_days}-day grace period</b> — the ${monthShort(g.periods[0].period)} payment can still be made until <b>${dateNice(g.periods[0].deadline)}</b> without a fine.</li>
           <li>Paying after the grace period incurs a <b>${peso(g.fine_amount)}</b> fine${g.fine_per_day ? ` plus <b>${peso(g.fine_per_day)}</b> for every extra day` : ''}.</li>
-          <li>Each month, one member receives the <b>${esc(g.model)} ${esc(g.storage || '')}</b> according to their payout turn.</li>
+          <li>The wheel includes only members whose monthly hulog and required fines are verified. You can spin while others remain unpaid. Previous winners from other months and released members are excluded; all members must continue paying.</li>
         </ol>
         ${g.notes ? `<p class="muted">${esc(g.notes)}</p>` : ''}
       </div>
     </div>`;
 
   // events
+  await mountMonthlyDraw(page.querySelector('[data-monthly-draw]'), g.id, async memberId => {
+    try { payoutModal(await api(`/members/${memberId}`)); } catch (error) { toast(error.message, 'err'); }
+  });
+  if (!page.isConnected) return;
   page.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => {
     sessionStorage.setItem('palu.gtab', b.dataset.tab);
     page.querySelectorAll('[data-tab]').forEach((x) => x.classList.toggle('on', x === b));
@@ -370,7 +371,7 @@ export async function viewGroup(page, id) {
   piso.setTips([
     { text: 'Click any square on the board to record a payment for that month.', mood: 'grin' },
     { text: 'Gold coins = paid this month. Orange = overdue. Hover the coins on the 3D phone!' },
-    { text: `The gift icon marks the month each member receives the ${g.model}.` },
+    { text: 'The monthly wheel excludes previous winners and released members. Gift icons mark saved winner months.' },
     ...(g.open ? [{ text: `${g.open} slot${g.open > 1 ? 's' : ''} still open in this group.`, actions: [{ label: 'Add member', onClick: () => memberForm(g) }] }] : []),
   ]);
 }
@@ -390,7 +391,7 @@ export async function viewMembers(page) {
       <select data-g><option value="">All groups</option>${groups.map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join('')}</select>
       <div class="seg">${[['all', 'All'], ['overdue', 'Overdue'], ['grace', 'Grace'], ['good', 'Good'], ['complete', 'Done']].map(([k, l]) => `<button data-f="${k}" class="${k === 'all' ? 'on' : ''}">${l}</button>`).join('')}</div>
     </div>
-    <div class="card flush"><div class="table-wrap"><table class="table members-table"><thead><tr><th>Member</th><th>Group</th><th>Turn</th><th>Payments</th><th class="num">Paid</th><th class="num">Due</th><th>Status</th></tr></thead><tbody></tbody></table></div></div>`;
+    <div class="card flush"><div class="table-wrap"><table class="table members-table"><thead><tr><th>Member</th><th>Group</th><th>Draw / release</th><th>Payments</th><th class="num">Paid</th><th class="num">Due</th><th>Status</th></tr></thead><tbody></tbody></table></div></div>`;
   const tbody = page.querySelector('tbody');
   const render = () => {
     const list = members.filter((m) => (f === 'all' || m.summary.health === f) && (!gid || m.group_id === Number(gid)) && (!q || m.name.toLowerCase().includes(q) || m.phone.includes(q)));
@@ -398,7 +399,7 @@ export async function viewMembers(page) {
       <tr class="clickable" data-member="${m.id}">
         <td><div class="mrow"><div class="avatar sm" style="--c:${esc(m.color_hex)}">${esc(initials(m.name))}</div><div><b>${esc(m.name)}</b><small class="mono muted">${esc(m.phone)}</small></div></div></td>
         <td><div>${esc(m.group)}</div><small class="muted">${esc(m.model)} ${esc(m.storage || '')}</small></td>
-        <td class="mono">#${m.payout_order}<small class="muted block">${monthShort(m.summary.payoutPeriod)}</small></td>
+        <td class="small">${m.summary.payoutReleased ? 'Device released' : m.summary.payoutSelected ? 'Awaiting release' : 'Awaiting draw'}<small class="muted block">${m.summary.payoutPeriod ? monthShort(m.summary.payoutPeriod) : `Member #${m.payout_order}`}</small></td>
         <td><div class="strip">${m.strip.map((s) => `<i class="s-${s}"></i>`).join('')}</div><small class="mono muted">${m.summary.paidCount}/${m.summary.totalPeriods}</small></td>
         <td class="num">${peso(m.summary.totalPaid)}</td>
         <td class="num">${m.summary.outstanding + m.summary.fineBalance > 0 ? `<b class="red">${peso(m.summary.outstanding + m.summary.fineBalance)}</b>` : '<span class="muted">—</span>'}</td>
@@ -420,12 +421,18 @@ export async function viewMembers(page) {
 
 // ======================= PAYMENTS =======================
 export async function viewPayments(page) {
-  const [rows, groups] = await Promise.all([api('/payments'), api('/groups')]);
+  const [rows, groups, submissions] = await Promise.all([api('/payments'), api('/groups'), api('/payment-submissions')]);
   let gid = '', month = '';
   page.innerHTML = `
     <section class="page-head">
       <div><div class="kicker mono">ledger</div><h1 class="display">Payment <em>records</em></h1></div>
       <div class="head-actions"><button class="btn btn-ghost" data-csv>${I.download} Export CSV</button><button class="btn btn-primary" data-pay>${I.cash} Record payment</button></div>
+    </section>
+    <section class="card payment-submissions-card" data-payment-reviews>
+      <div class="card-head"><div><span class="kicker mono">Member payment verification</span><h3>Submitted receipts <span class="chip st-grace">${submissions.filter(item => item.status === 'pending').length} pending</span></h3></div><button class="btn btn-ghost btn-sm" data-refresh-reviews>Refresh</button></div>
+      <p class="muted small">Review each receipt against the actual receiving account before approval. Pending submissions have not been added to the ledger.</p>
+      <label class="field review-filter"><span>Show submissions</span><select data-review-filter><option value="pending">Pending review</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="all">All submissions</option></select></label>
+      <div class="submission-list" data-review-list></div>
     </section>
     <div class="toolbar">
       <select data-g><option value="">All groups</option>${groups.map((g) => `<option value="${g.id}">${esc(g.name)}</option>`).join('')}</select>
@@ -443,15 +450,26 @@ export async function viewPayments(page) {
     tbody.innerHTML = list.length ? list.map((r) => `
       <tr><td class="mono small">${dateNice(r.paid_on)}</td><td><button class="link-btn" data-member="${r.member_id}">${esc(r.member)}</button></td><td class="muted">${esc(r.grp)}</td><td>${monthShort(r.period)}</td>
       <td class="num"><b>${peso(r.amount)}</b></td><td class="num">${r.fine ? `<span class="accent">${peso(r.fine)}</span>` : '—'}</td>
-      <td>${esc(r.method || '')}${r.ref ? `<small class="mono muted block">#${esc(r.ref)}</small>` : ''}</td>
+      <td>${esc(r.method || '')}${r.ref ? `<small class="mono muted block">#${esc(r.ref)}</small>` : ''}${r.proof_id ? `<button class="btn btn-ghost btn-sm" data-proof="${r.proof_id}">View receipt</button>` : '<small class="muted block">No attachment</small>'}</td>
       <td><button class="icon-btn danger" data-del="${r.id}" title="Void">${I.trash}</button></td></tr>`).join('')
       : `<tr><td colspan="8">${empty('No payments found', rows.length ? 'Try clearing the filters.' : 'Recorded payments will appear here.')}</td></tr>`;
     tbody.querySelectorAll('[data-member]').forEach((b) => (b.onclick = () => memberDetail(Number(b.dataset.member))));
+    tbody.querySelectorAll('[data-proof]').forEach(button => { button.onclick = () => viewProof(button.dataset.proof); });
     tbody.querySelectorAll('[data-del]').forEach((b) => (b.onclick = async () => {
       if (!(await confirmBox({ title: 'Void this payment?', text: 'The record will be permanently removed and balances recalculated.', ok: 'Void payment', danger: true }))) return;
       try { await api(`/payments/${b.dataset.del}`, { method: 'DELETE' }); toast('Payment voided'); window.dispatchEvent(new Event('palu:changed')); } catch (e) { toast(e.message, 'err'); }
     }));
   };
+  const reviewFilter = page.querySelector('[data-review-filter]');
+  const renderReviews = () => {
+    const filtered = submissions.filter(item => reviewFilter.value === 'all' || item.status === reviewFilter.value);
+    page.querySelector('[data-review-list]').innerHTML = filtered.map(item => `<article class="submission-row"><div><b>${esc(item.member)} · ${peso(item.amount + item.fine)}</b><small class="muted block">${esc(item.grp)} · ${monthLong(item.period)}</small><small class="muted block">${esc(item.method)} · ${dateNice(item.paid_on)} · Reference: ${esc(item.ref)}</small>${item.duplicate_warning ? `<p class="small red">${esc(item.duplicate_warning)}</p>` : ''}${item.review_note ? `<p class="small">Review: ${esc(item.review_note)}</p>` : ''}${item.reviewed_at ? `<small class="muted block">Reviewed by ${esc(item.reviewer || 'Seller')} · ${dateNice(item.reviewed_at.slice(0, 10))}</small>` : ''}</div><div class="submission-actions">${submissionStatus(item)}<button class="btn btn-ghost btn-sm" data-submission-proof="${item.proof_id}">View receipt</button>${item.status === 'pending' ? `<button class="btn btn-primary btn-sm" data-review="${item.id}">Review</button>` : ''}</div></article>`).join('') || '<p class="muted">No submissions in this view.</p>';
+    page.querySelectorAll('[data-review]').forEach(button => { button.onclick = () => reviewSubmission(submissions.find(item => item.id === Number(button.dataset.review))); });
+    page.querySelectorAll('[data-submission-proof]').forEach(button => { button.onclick = () => viewProof(button.dataset.submissionProof); });
+  };
+  reviewFilter.onchange = renderReviews;
+  page.querySelector('[data-refresh-reviews]').onclick = () => window.dispatchEvent(new Event('palu:changed'));
+  renderReviews();
   page.querySelector('[data-g]').onchange = (e) => { gid = e.target.value; render(); };
   page.querySelector('[data-m]').onchange = (e) => { month = e.target.value; render(); };
   page.querySelector('[data-clear]').onclick = () => { gid = ''; month = ''; page.querySelector('[data-g]').value = ''; page.querySelector('[data-m]').value = ''; render(); };

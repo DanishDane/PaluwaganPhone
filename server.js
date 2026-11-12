@@ -81,7 +81,7 @@ function getSettings() {
     maya_no: '',
     bank_name: '',
     bank_acc: '',
-    payment_instructions: 'Please send your proof of payment or screenshot via SMS or Viber once paid so the seller can verify and record your official receipt.'
+    payment_instructions: 'After transferring your payment, use Submit payment below to upload your receipt and transaction reference. Your seller will verify the transfer before it is recorded.'
   };
   for (const r of all('SELECT key, value FROM settings')) s[r.key] = r.value;
   return s;
@@ -119,6 +119,9 @@ function loadAll() {
     payments: all('SELECT * FROM payments ORDER BY paid_on DESC, id DESC'),
     waivers: all('SELECT * FROM waivers'),
     payouts: all('SELECT * FROM payouts'),
+    draws: all('SELECT * FROM monthly_draws ORDER BY period DESC'),
+    draw_attempts: all('SELECT * FROM draw_attempts ORDER BY id DESC'),
+    release_audit: all('SELECT * FROM release_audit ORDER BY id DESC'),
   };
 }
 
@@ -131,7 +134,8 @@ function enrichGroup(g, data, today) {
   const curIndex = periods.findIndex((p) => p.period === currentYm) + 1; // 0 if outside
   const em = members.map((m) => {
     const payout = data.payouts.find((p) => p.member_id === m.id);
-    const c = L.computeMember(g, m, payments, data.waivers, payout, today);
+    const draw = data.draws.find(draw => draw.member_id === m.id);
+    const c = L.computeMember(g, m, payments, data.waivers, payout, today, draw);
     return { ...m, ...c };
   });
   let phase = 'active';
@@ -174,6 +178,7 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
   next();
 });
+app.use(['/api/payment-submissions', '/api/payments'], express.json({ limit: '8mb' }));
 app.use(express.json({ limit: '1mb' }));
 app.get('/healthz', (req, res) => {
   try { db.prepare('SELECT 1').get(); res.json({ status: 'ok' }); }
@@ -213,6 +218,8 @@ function auth(role) {
   };
 }
 const seller = auth('seller');
+const paymentReview = require('./lib/payment-review')({ db, L, api, seller, auth, wrap, HttpError, bad, num, str, memberOr404, groupOr404, now });
+const monthlyDraws = require('./lib/monthly-draws')({ db, L, api, seller, wrap, HttpError, bad, str, groupOr404, memberOr404, now });
 
 api.get('/state', wrap(() => {
   const s = getSettings();
@@ -300,7 +307,7 @@ api.get('/dashboard', seller, wrap(() => {
   const grace = flat.filter(({ m }) => m.summary.graceCount > 0 && !m.summary.overdueCount).map(({ g, m }) => ({
     id: m.id, name: m.name, group: g.name, group_id: g.id, owed: m.summary.outstanding, deadline: m.summary.next && m.summary.next.deadline,
   }));
-  const payoutsDue = flat.filter(({ m }) => m.summary.payoutPeriod === ym).map(({ g, m }) => ({
+  const payoutsDue = flat.filter(({ m }) => m.summary.payoutSelected && !m.summary.payoutReleased).map(({ g, m }) => ({
     id: m.id, name: m.name, group: g.name, group_id: g.id, model: `${g.model} ${g.storage || ''}`.trim(), released: m.summary.payoutReleased,
   }));
   const statusMix = { paid: 0, late: 0, current: 0, grace: 0, overdue: 0 };
@@ -402,6 +409,7 @@ api.get('/groups/:id', seller, wrap((req) => {
 api.put('/groups/:id', seller, wrap((req) => {
   const ex = groupOr404(req.params.id);
   const g = readGroup(req.body, ex);
+  if (one('SELECT id FROM monthly_draws WHERE group_id=? LIMIT 1', ex.id) && (g.slots !== ex.slots || g.start_month !== ex.start_month || g.monthly !== ex.monthly || g.model !== ex.model || g.storage !== ex.storage || g.price !== ex.price)) bad('Member count, start month, monthly hulog, device model, storage and price cannot change after a saved draw.');
   run(`UPDATE pgroups SET name=?, model=?, variant=?, storage=?, color=?, color_hex=?, price=?, slots=?, monthly=?, start_month=?, grace_days=?, fine_amount=?, fine_per_day=?, notes=? WHERE id=?`,
     g.name, g.model, g.variant, g.storage, g.color, g.color_hex, g.price, g.slots, g.monthly, g.start_month, g.grace_days, g.fine_amount, g.fine_per_day, g.notes, ex.id);
   return { ok: true };
@@ -409,6 +417,7 @@ api.put('/groups/:id', seller, wrap((req) => {
 
 api.delete('/groups/:id', seller, wrap((req) => {
   const g = groupOr404(req.params.id);
+  if (one('SELECT id FROM monthly_draws WHERE group_id=? LIMIT 1', g.id)) bad('Groups with saved draw history cannot be deleted.');
   run('DELETE FROM pgroups WHERE id = ?', g.id);
   return { ok: true };
 }));
@@ -494,6 +503,7 @@ api.put('/members/:id', seller, wrap((req) => {
 
 api.delete('/members/:id', seller, wrap((req) => {
   const m = memberOr404(req.params.id);
+  if (one('SELECT id FROM monthly_draws WHERE group_id=? LIMIT 1', m.group_id)) bad('Members cannot be removed from a group with saved draw history.');
   run('DELETE FROM members WHERE id = ?', m.id);
   return { ok: true };
 }));
@@ -513,23 +523,7 @@ api.get('/quote', seller, wrap((req) => {
   return { balance: p.balance, fine: L.round2(Math.max(0, fine - p.finePaid)), deadline: p.deadline, due: p.due, waived: p.waived };
 }));
 
-api.post('/payments', seller, wrap((req) => {
-  const m = memberOr404(req.body.member_id);
-  const g = groupOr404(m.group_id);
-  const period = String(req.body.period || '');
-  if (!L.groupPeriods(g).some((p) => p.period === period)) bad('Choose a valid month for this group.');
-  const paid_on = isDate(req.body.paid_on) ? req.body.paid_on : L.todayStr();
-  const amount = num(req.body.amount, 'Amount', { min: 0 });
-  const fine = num(req.body.fine || 0, 'Fine', { min: 0 });
-  if (amount === 0 && fine === 0) bad('Enter an amount or a fine.');
-  const paidSoFar = one('SELECT COALESCE(SUM(amount), 0) AS s FROM payments WHERE member_id = ? AND period = ?', m.id, period).s;
-  const balance = L.round2(g.monthly - paidSoFar);
-  if (amount > balance + 0.005) bad(balance <= 0 ? 'This month is already fully paid.' : `Amount exceeds remaining balance of ₱${balance.toLocaleString()}.`);
-  const r = run('INSERT INTO payments(member_id, group_id, period, amount, fine, paid_on, method, ref, note, created) VALUES(?,?,?,?,?,?,?,?,?,?)',
-    m.id, g.id, period, amount, fine, paid_on, str(req.body.method, 'Method', { required: false, max: 40 }) || 'Cash',
-    str(req.body.ref, 'Reference', { required: false, max: 80 }), str(req.body.note, 'Note', { required: false, max: 300 }), now());
-  return { id: Number(r.lastInsertRowid) };
-}));
+api.post('/payments', seller, wrap(req => paymentReview.createPayment(req.body)));
 
 api.get('/payments', seller, wrap((req) => {
   let rows = all(`SELECT p.*, m.name AS member, m.phone, g.name AS grp, g.model FROM payments p
@@ -571,19 +565,8 @@ api.delete('/waivers', seller, wrap((req) => {
   return { ok: true };
 }));
 
-api.post('/payouts', seller, wrap((req) => {
-  const m = memberOr404(req.body.member_id);
-  const g = groupOr404(m.group_id);
-  if (one('SELECT id FROM payouts WHERE member_id = ?', m.id)) bad('iPhone already released to this member.');
-  run('INSERT INTO payouts(group_id, member_id, period, released_on, imei, note) VALUES(?,?,?,?,?,?)', g.id, m.id,
-    L.addMonths(g.start_month, m.payout_order - 1), isDate(req.body.released_on) ? req.body.released_on : L.todayStr(),
-    str(req.body.imei, 'IMEI / Serial', { required: false, max: 40 }), str(req.body.note, 'Note', { required: false, max: 300 }));
-  return { ok: true };
-}));
-api.delete('/payouts/:memberId', seller, wrap((req) => {
-  run('DELETE FROM payouts WHERE member_id = ?', Number(req.params.memberId));
-  return { ok: true };
-}));
+api.post('/payouts', seller, wrap(req => monthlyDraws.release(req.body, Number(req.session.ref))));
+api.delete('/payouts/:memberId', seller, wrap(req => monthlyDraws.undoRelease(req.params.memberId, req.body, Number(req.session.ref))));
 
 // ----- settings -----
 api.get('/settings', seller, wrap(() => getSettings()));
@@ -613,7 +596,7 @@ api.post('/password', seller, wrap((req) => {
 }));
 api.get('/backup', seller, wrap(() => {
   const d = loadAll();
-  return { exported: now(), settings: getSettings(), ...d };
+  return { exported: now(), settings: getSettings(), ...d, payment_review: paymentReview.backup() };
 }));
 
 // ----- member portal -----
@@ -631,7 +614,7 @@ api.get('/portal', auth('member'), wrap((req) => {
     const em = e.members.find((x) => x.id === id);
     slots.push({
       member: { id: em.id, name: em.name, payout_order: em.payout_order },
-      periods: em.periods.map(({ payments, ...p }) => ({ ...p, payments: payments.map(({ id, amount, fine, paid_on, method }) => ({ id, amount, fine, paid_on, method })) })),
+      periods: em.periods.map(({ payments, ...p }) => ({ ...p, payments: payments.map(({ id, amount, fine, paid_on, method, proof_id, ref }) => ({ id, amount, fine, paid_on, method, proof_id, ref })) })),
       summary: em.summary,
       group: {
         name: g.name, model: g.model, variant: g.variant, storage: g.storage, color: g.color, color_hex: g.color_hex, price: g.price, slots: g.slots, monthly: g.monthly,

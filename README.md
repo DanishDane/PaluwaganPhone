@@ -12,7 +12,8 @@ A full-stack, responsive web application designed for iPhone Paluwagan businesse
 - **Dynamic iPhone Model Management**: Create groups for any iPhone model (iPhone 11 to 16 Pro Max), storage variants, and colorways with custom 3D shader rendering.
 - **Configurable Member Sizing**: Supports 12-member groups, 10-member batches, or custom group counts with automated monthly calculations (`price ÷ members`).
 - **End-of-Month Due Dates & 5-Day Grace Period**: Payments are due on the final calendar day of each month, with a configurable 5-day grace extension. Late fines calculate automatically after grace expires.
-- **Member Self-Service Portal**: Members log in with their mobile number and secret PIN to view their balance, payout turn (#1–#12), due dates, and verified payment channels (GCash, Maya, Bank Transfer).
+- **Member Self-Service Portal**: Members log in with their mobile number and PIN to submit receipt proofs, view balances, monthly draw results, release status, and seller payment channels.
+- **Monthly iPhone Draw**: Group pages automatically include members who have not won or received a device. Verified monthly collections unlock a server-selected, saved winner; Messenger announcements and release records stay separate from chat.
 - **Responsive Dual UI**: Full-featured desktop dashboard and a native-style mobile bottom navigation bar (`Home`, `Groups`, `Hulog FAB`, `Members`, `Ledger`).
 - **3D Three.js Visuals & Sound FX**: Interactive procedural 3D iPhone with orbiting status coins, and Web Audio synthesis for button clicks, cash registers, and stamp sound effects.
 - **Piso Mascot**: Interactive companion character providing real-time alerts for overdue payments and tips.

@@ -6,11 +6,12 @@ import { state, track, disposeScenes } from './state.js';
 import { I } from './icons.js';
 import { isPro } from './data.js';
 import { PhoneScene } from './three-phone.js';
+import { submitPaymentModal, submissionStatus, viewProof } from './payment-proofs.js';
 import { esc, peso, monthShort, monthLong, dateNice, chip, HEALTH, STATUS, daysBetween, toast } from './ui.js';
 
 export async function viewPortal(page) {
   disposeScenes();
-  const d = await api('/portal');
+  const [d, submissions] = await Promise.all([api('/portal'), api('/payment-submissions')]);
   state.today = d.today;
   const slotIdx = Number(sessionStorage.getItem('palu.portal.slot') || 0);
   const active = d.slots[slotIdx] || d.slots[0];
@@ -40,7 +41,7 @@ export async function viewPortal(page) {
           <div class="tl-info">
             <div class="tl-title">
               <b>${monthLong(p.period)}</b>
-              ${p.isPayout ? `<span class="badge-turn">${I.gift} Your iPhone Turn!</span>` : ''}
+              ${p.isPayout ? `<span class="badge-turn">${I.gift} Your draw month</span>` : ''}
               ${isNow ? `<span class="badge-current">Current Month</span>` : ''}
             </div>
             <div class="tl-dates mono small muted">
@@ -54,6 +55,7 @@ export async function viewPortal(page) {
             ${p.paid > 0 ? `<span class="tl-paid">Paid: ${peso(p.paid)}</span>` : ''}
             ${p.balance > 0 && p.status !== 'future' ? `<span class="tl-due">Due: ${peso(p.balance)}</span>` : ''}
             ${p.fineBalance > 0 ? `<span class="tl-fine">Late Fine: ${peso(p.fineBalance)}</span>` : ''}
+            ${p.payments.filter(payment => payment.proof_id).map(payment => `<button class="btn btn-ghost btn-sm" data-proof="${payment.proof_id}">View recorded receipt</button>`).join('')}
           </div>
         </div>
       </div>
@@ -66,14 +68,14 @@ export async function viewPortal(page) {
       <div>
         <div class="kicker mono">${esc(d.business_name)} · Official Member Portal</div>
         <h1 class="display">Kumusta, <em>${esc(d.name.split(' ')[0])}</em>!</h1>
-        <p class="muted">Monitor your iPhone paluwagan status, payment due dates, and payout delivery turn.</p>
+        <p class="muted">Monitor your iPhone paluwagan status, payments, monthly draw result and device release.</p>
       </div>
 
       ${d.slots.length > 1 ? `
         <div class="seg slot-switcher">
           ${d.slots.map((sl, i) => `
             <button data-slot="${i}" class="${i === slotIdx ? 'on' : ''}">
-              ${esc(sl.group.model)} (Turn #${sl.member.payout_order})
+              ${esc(sl.group.model)} (Member #${sl.member.payout_order})
             </button>
           `).join('')}
         </div>
@@ -88,7 +90,7 @@ export async function viewPortal(page) {
             ● ${HEALTH[s.health]?.label || s.health}
           </span>
           <span class="portal-badge badge-payout">
-            ${I.gift} You receive your ${esc(g.model)} in: <b>${monthLong(s.payoutPeriod)} (Turn #${m.payout_order})</b>
+            ${I.gift} <b>${s.payoutReleased ? 'Device received' : s.payoutSelected ? `Selected for ${monthLong(s.payoutPeriod)} · awaiting release` : 'Awaiting monthly draw'}</b>
           </span>
         </div>
 
@@ -114,7 +116,7 @@ export async function viewPortal(page) {
             <div class="date-callout callout-done">
               <span class="callout-ico">${I.check}</span>
               <div>
-                <b>Congratulations! All 12 payments are complete!</b>
+                <b>Congratulations! All ${g.slots} payments are complete!</b>
                 <p>Thank you for trusting ${esc(d.business_name)}.</p>
               </div>
             </div>
@@ -138,7 +140,7 @@ export async function viewPortal(page) {
           <div class="payout-status-tag">
             ${s.payoutReleased
               ? `<span class="chip st-paid"><i></i>Unit Handed Over (${dateNice(s.payout.released_on)})</span>`
-              : `<span class="chip st-current"><i></i>Claim Turn: #${m.payout_order} of ${g.slots}</span>`}
+              : `<span class="chip st-current"><i></i>${s.payoutSelected ? `Winner: ${monthLong(s.payoutPeriod)}` : 'Eligible for monthly draw'}</span>`}
           </div>
         </div>
       </div>
@@ -198,6 +200,12 @@ export async function viewPortal(page) {
       </div>
     </div>
 
+    <section class="card payment-submissions-card">
+      <div class="card-head"><div><span class="kicker mono">Proof of payment</span><h3>Your submitted payments</h3></div><div class="head-actions"><button class="btn btn-ghost btn-sm" data-refresh-submissions>Refresh status</button><button class="btn btn-primary" data-submit-payment>Submit payment</button></div></div>
+      <p class="muted small">Upload your transfer receipt for seller verification. Pending and rejected submissions do not reduce your balance. Submit each transfer once.</p>
+      <div class="submission-list">${submissions.filter(item => item.member_id === m.id).map(item => `<article class="submission-row"><div><b>${monthLong(item.period)} · ${peso(item.amount + item.fine)}</b><small class="muted block">${esc(item.method)} · ${dateNice(item.paid_on)} · Reference: ${esc(item.ref)}</small>${item.review_note ? `<p class="small">Seller: ${esc(item.review_note)}</p>` : ''}${item.payment_voided ? '<p class="small red">The recorded payment was voided. Contact your seller.</p>' : ''}</div><div class="submission-actions">${submissionStatus(item)}<button class="btn btn-ghost btn-sm" data-proof="${item.proof_id}">View receipt</button></div></article>`).join('') || '<p class="muted">No submissions for this membership yet.</p>'}</div>
+    </section>
+
     <!-- Timeline & Rules -->
     <div class="portal-grid">
       <div class="card timeline-card">
@@ -243,8 +251,8 @@ export async function viewPortal(page) {
           <div class="rule-item">
             <span class="rule-num mono">04</span>
             <div>
-              <b>Turn #${m.payout_order} iPhone Release</b>
-              <p>Your unit will be released during your turn month (${monthLong(s.payoutPeriod)}), complete with warranty and accessories.</p>
+              <b>${s.payoutReleased ? 'Device received' : s.payoutSelected ? 'Selected for release' : 'Monthly iPhone Draw'}</b>
+              <p>${s.payoutReleased ? 'Continue paying your remaining monthly contributions.' : s.payoutSelected ? `You are the current winner for ${monthLong(s.payoutPeriod)}. The seller may spin again before release; the latest saved result applies. Message your seller to arrange handover. Remaining monthly payments still apply.` : 'Your name enters the wheel once your monthly hulog and required fines are verified. Unpaid members, winners from other months and released members are excluded. The seller can draw before everyone pays and can spin again before release.'}</p>
             </div>
           </div>
         </div>
@@ -253,6 +261,9 @@ export async function viewPortal(page) {
   `;
 
   // Event handlers
+  page.querySelector('[data-submit-payment]').onclick = () => submitPaymentModal(active, d.today);
+  page.querySelector('[data-refresh-submissions]').onclick = () => window.dispatchEvent(new Event('palu:changed'));
+  page.querySelectorAll('[data-proof]').forEach(button => { button.onclick = () => viewProof(button.dataset.proof); });
   page.querySelectorAll('[data-slot]').forEach((btn) => {
     btn.onclick = () => {
       sessionStorage.setItem('palu.portal.slot', btn.dataset.slot);
@@ -284,7 +295,7 @@ export async function viewPortal(page) {
     cameraZ: 8.6,
     screen: {
       title: g.model,
-      kicker: `Turn #${m.payout_order}`,
+      kicker: s.payoutReleased ? 'Device received' : s.payoutSelected ? 'Draw winner' : 'Monthly draw',
       sub: `${s.paidCount}/${g.slots} paid`,
     },
   })).setFilled(s.paidCount, coinStates);

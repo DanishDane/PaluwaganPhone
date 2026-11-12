@@ -27,6 +27,7 @@ async function init() {
   const prepare = async () => {
     try {
       state.meta = await api('/state');
+      state.today = state.meta.today;
       const cur = session.get();
       if (cur?.token) {
         try { state.me = await api('/me'); }
