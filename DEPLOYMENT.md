@@ -78,7 +78,10 @@ The process manager must capture logs and restart the service on failure.
 7. Check the ledger, export CSV records and record releases when devices are handed
    over. Voiding payments, deleting groups and undoing releases change financial
    records; review the confirmation before proceeding.
-8. The mascot remains below the page content; click it for contextual guidance.
+8. On the member portal, the coin mascot stays in the bottom corner while scrolling.
+   Click it for guidance or drag it to another position. It stays inside the screen
+   after resizing and hides while a modal is open. Seller pages keep the mascot
+   below the page content.
    Settings controls its visibility and sound. Wide ledgers scroll inside their
    cards on mobile; navigation remains at the top.
 

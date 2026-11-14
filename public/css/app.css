@@ -1811,6 +1811,18 @@ body:has(.modal-wrap) #mascot-root { visibility: hidden; }
 .tl-sub { font-size: .7rem; color: var(--ink-3); }
 .piso { position: relative; bottom: auto; right: auto; width: 100px; margin: 0 24px 16px auto; }
 .piso-body { touch-action: none; }
+#mascot-root.floating-companion .piso {
+  position: fixed;
+  width: 72px;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: calc(max(12px, env(safe-area-inset-bottom)) + var(--piso-viewport-bottom, 0px));
+  margin: 0;
+  z-index: 80;
+}
+#mascot-root.floating-companion .piso-body { width: 72px; height: 94px; }
+#mascot-root.floating-companion .piso-bubble { bottom: 90px; max-height: min(320px, calc(100dvh - 180px)); overflow-y: auto; }
+#mascot-root.floating-companion .piso.bubble-below .piso-bubble { bottom: auto; top: 90px; }
+.member-layout .app-content { padding-bottom: max(140px, calc(120px + env(safe-area-inset-bottom))); }
 #toasts { max-width: min(440px, calc(100% - 32px)); left: 16px; bottom: max(16px, env(safe-area-inset-bottom)); }
 .toast { border-radius: var(--radius-md); overflow-wrap: anywhere; }
 

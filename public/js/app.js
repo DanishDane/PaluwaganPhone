@@ -86,11 +86,12 @@ async function renderRoute() {
   }
 
   const role = state.me.role; // 'seller' | 'member'
+  piso.setFloating(role === 'member');
   mascotEl.hidden = false;
 
   // Build Shell
   appEl.innerHTML = `
-    <div class="app-layout">
+    <div class="app-layout ${role === 'member' ? 'member-layout' : ''}">
       <header class="app-topbar">
         <div class="topbar-left">
           <a href="${role === 'seller' ? '#/dashboard' : '#/portal'}" class="brand-link">

@@ -55,7 +55,7 @@ class Piso {
     this.clicks = [];
     this.lastActivity = Date.now();
 
-    // Keep Piso in its reserved footer space, clear of forms and navigation.
+    // The member portal floats Piso; seller pages retain their footer placement.
 
     root.querySelector('.piso-x').addEventListener('click', (e) => { e.stopPropagation(); this.hide(); sfx.close(); });
 
@@ -96,6 +96,16 @@ class Piso {
       } else this._clicked();
       start = null;
     });
+    this.body.addEventListener('pointercancel', () => {
+      start = null;
+      this.el.classList.remove('dragging');
+    });
+    this.body.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        this._clicked();
+      }
+    });
 
     // idle → sleepy
     this.idleTimer = setInterval(() => {
@@ -115,13 +125,44 @@ class Piso {
     };
     this.blinkT = setTimeout(blink, 2000);
 
-    window.addEventListener('resize', () => {
+    this._fitViewport = () => {
+      const viewport = window.visualViewport;
+      const covered = viewport ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop) : 0;
+      this.root.style.setProperty('--piso-viewport-bottom', covered + 'px');
       const r = this.el.getBoundingClientRect();
       if (this.el.style.left) this._place(r.left, r.top);
-    });
+    };
+    window.addEventListener('resize', this._fitViewport);
+    window.visualViewport?.addEventListener('resize', this._fitViewport);
+    window.visualViewport?.addEventListener('scroll', this._fitViewport);
+  }
+
+  setFloating(on) {
+    if (this.floating !== on) {
+      this.floating = on;
+      this.root.classList.toggle('floating-companion', on);
+      for (const property of ['left', 'top', 'right', 'bottom', 'margin-left', 'margin-right']) this.el.style.removeProperty(property);
+      this.el.classList.remove('bubble-right', 'bubble-below');
+    }
+    this._fitViewport();
   }
 
   _place(x, y) {
+    if (this.floating) {
+      const viewport = window.visualViewport;
+      const left = viewport?.offsetLeft || 0, top = viewport?.offsetTop || 0;
+      const width = viewport?.width || window.innerWidth, height = viewport?.height || window.innerHeight;
+      const maxX = Math.max(left + 12, left + width - this.el.offsetWidth - 12);
+      const maxY = Math.max(top + 12, top + height - this.el.offsetHeight - 12);
+      const headerBottom = document.querySelector('.app-topbar')?.getBoundingClientRect().bottom || top;
+      const minY = Math.min(maxY, Math.max(top + 12, headerBottom + 8));
+      x = Math.max(left + 12, Math.min(maxX, x));
+      y = Math.max(minY, Math.min(maxY, y));
+      Object.assign(this.el.style, { left: x + 'px', top: y + 'px', right: 'auto', bottom: 'auto' });
+      this.el.classList.toggle('bubble-right', x < left + width / 2);
+      this.el.classList.toggle('bubble-below', y - top < Math.min(220, height / 2));
+      return;
+    }
     const w = this.el.offsetWidth;
     x = Math.max(16, Math.min(window.innerWidth - w - 16, x));
     Object.assign(this.el.style, { marginLeft: x + 'px', marginRight: '0' });

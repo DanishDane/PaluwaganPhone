@@ -63,6 +63,63 @@ const net = require('node:net');
       assert.deepEqual(issues, [], label);
       console.log('PASS', label);
     };
+    if (process.env.BROWSER_MASCOT_ONLY === '1') {
+      await page.goto(base);
+      await page.evaluate(session => {
+        localStorage.setItem('palu.session', JSON.stringify(session));
+        sessionStorage.setItem('palu.booted', '1');
+      }, memberSession);
+      await page.reload();
+      await page.waitForSelector('.portal-hero');
+      await page.waitForFunction(() => !document.querySelector('.boot'));
+      const visibleCoin = async label => {
+        const bounds = await page.$eval('.piso', el => {
+          const r = el.getBoundingClientRect();
+          return { position: getComputedStyle(el).position, visibility: getComputedStyle(el).visibility,
+            left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: innerWidth, height: innerHeight };
+        });
+        assert.equal(bounds.position, 'fixed', label);
+        assert.equal(bounds.visibility, 'visible', label);
+        assert.ok(bounds.left >= 0 && bounds.top >= 0 && bounds.right <= bounds.width + 1 && bounds.bottom <= bounds.height + 1, JSON.stringify(bounds));
+        console.log('PASS', label);
+        return bounds;
+      };
+      for (const width of [320, 390, 768, 1440]) {
+        await page.setViewport({ width, height: 844 });
+        await page.evaluate(() => window.scrollTo(0, 0));
+        const initial = await visibleCoin(`member coin at page top ${width}`);
+        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight / 2));
+        const middle = await visibleCoin(`member coin midway ${width}`);
+        assert.ok(Math.abs(initial.top - middle.top) < 1);
+        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+        const bottom = await visibleCoin(`member coin at page bottom ${width}`);
+        assert.ok(Math.abs(initial.top - bottom.top) < 1);
+        if (width === 390) {
+          await page.evaluate(() => window.scrollTo(0, 0));
+          await page.screenshot({ path: '.artifacts/member-floating-coin-390.png', fullPage: false });
+        }
+      }
+      await page.mouse.move(1400, 790);
+      await page.mouse.down();
+      await page.mouse.move(1100, 300, { steps: 10 });
+      await page.mouse.up();
+      await visibleCoin('member coin after dragging');
+      await page.setViewport({ width: 320, height: 568 });
+      await visibleCoin('dragged coin remains visible after shrinking viewport');
+      await page.evaluate(() => document.querySelector('[data-submit-payment]').click());
+      await page.waitForSelector('.modal-wrap.in');
+      assert.equal(await page.$eval('.piso', el => getComputedStyle(el).visibility), 'hidden');
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => !document.querySelector('.modal-wrap'));
+      await visibleCoin('coin returns after closing payment dialog');
+      await page.evaluate(session => localStorage.setItem('palu.session', JSON.stringify(session)), seller);
+      await page.reload();
+      await page.waitForSelector('.app-content .page-head');
+      assert.equal(await page.$eval('.piso', el => getComputedStyle(el).position), 'relative');
+      console.log('PASS seller footer placement retained');
+      assert.deepEqual(errors, [], 'Browser runtime errors');
+      return;
+    }
     const widths = process.env.BROWSER_WIDTHS ? process.env.BROWSER_WIDTHS.split(',').map(Number).filter(width => width > 0) : [320, 375, 390, 700, 768, 900, 1024, 1150, 1440, 1920];
     for (const width of widths) {
       await page.setViewport({ width, height: Number(process.env.BROWSER_HEIGHT || 900) });
