@@ -27,6 +27,11 @@ export const I = {
   more: p('<circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/>'),
   spark: p('<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>'),
   replay: p('<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 4.5v4h4"/>'),
+  user: p('<circle cx="12" cy="8.2" r="3.6"/><path d="M5 19.5c.9-3.6 3.5-5.4 7-5.4s6.1 1.8 7 5.4"/>'),
+  lock: p('<rect x="5" y="11" width="14" height="9.5" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>'),
+  eye: p('<path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"/><circle cx="12" cy="12" r="2.7"/>'),
+  eyeOff: p('<path d="M17.94 17.94A10.9 10.9 0 0 1 12 18c-6 0-9.5-6-9.5-6a18.5 18.5 0 0 1 4.42-4.88M9.9 6.24A9.8 9.8 0 0 1 12 6c6 0 9.5 6 9.5 6a18.6 18.6 0 0 1-2.16 3.19"/><path d="m3 3 18 18"/>'),
+  shield: p('<path d="M12 3.2 4.5 6.4v5.3c0 4.6 3.2 8.4 7.5 9.3 4.3-.9 7.5-4.7 7.5-9.3V6.4z"/><path d="m9 12.2 2 2 4-4"/>'),
 };
 
 export const coinMark = `<svg viewBox="0 0 40 40" class="coin-mark" aria-hidden="true"><circle cx="20" cy="20" r="17" fill="#E9B949" stroke="#16130F" stroke-width="2.5"/><circle cx="20" cy="20" r="12.5" fill="none" stroke="#B88A22" stroke-width="1.6" stroke-dasharray="1.5 2.6"/><text x="20" y="26.5" text-anchor="middle" font-family="Instrument Serif, serif" font-size="19" fill="#16130F">₱</text></svg>`;

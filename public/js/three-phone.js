@@ -43,6 +43,24 @@ function shadowTexture() {
   return t;
 }
 
+function appleLogoTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const ctx = c.getContext('2d');
+  const p = new Path2D('M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z');
+  const s = 190 / 448;
+  ctx.save();
+  ctx.translate(128 - 192.2 * s, 128 - 256 * s);
+  ctx.scale(s, s);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill(p);
+  ctx.restore();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
 export function drawScreen(canvas, o = {}) {
   const c = canvas.getContext('2d');
   const w = canvas.width, h = canvas.height;
@@ -217,6 +235,21 @@ export class PhoneScene {
     back.rotation.y = Math.PI;
     phone.add(back);
 
+    // glossy Apple logo on back glass
+    this.logoMat = new THREE.MeshPhysicalMaterial({
+      map: appleLogoTexture(),
+      color: new THREE.Color(this.o.color).lerp(new THREE.Color(0xffffff), 0.38),
+      metalness: 0.92,
+      roughness: 0.08,
+      clearcoat: 1,
+      transparent: true,
+      alphaTest: 0.02,
+    });
+    const logo = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.42), this.logoMat);
+    logo.position.set(0, 0.02, -D / 2 - 0.003);
+    logo.rotation.y = Math.PI;
+    phone.add(logo);
+
     // camera bump
     const bumpSize = this.o.pro ? 0.7 : 0.62;
     const bump = new THREE.Mesh(new RoundedBoxGeometry(bumpSize, bumpSize, 0.06, 4, 0.14), new THREE.MeshPhysicalMaterial({ color: new THREE.Color(this.o.color).multiplyScalar(0.85), metalness: 0.6, roughness: 0.25, clearcoat: 1 }));
@@ -227,7 +260,7 @@ export class PhoneScene {
     const lensMat = new THREE.MeshPhysicalMaterial({ color: 0x0a0a0c, metalness: 0.9, roughness: 0.1, clearcoat: 1 });
     const glassGeo = new THREE.CircleGeometry(0.09, 32);
     const glassMat = new THREE.MeshPhysicalMaterial({ color: 0x1a2440, metalness: 1, roughness: 0.05, iridescence: 1, iridescenceIOR: 1.6 });
-    const lensPos = this.o.pro ? [[-0.16, 0.16], [-0.16, -0.16], [0.16, 0]] : [[-0.14, 0.14], [0.14, -0.14]];
+    const lensPos = this.o.pro ? [[0.16, 0.16], [0.16, -0.16], [-0.16, 0]] : [[0.14, 0.14], [-0.14, -0.14]];
     for (const [lx, ly] of lensPos) {
       const lens = new THREE.Mesh(lensGeo, lensMat);
       lens.rotation.x = Math.PI / 2;
@@ -237,6 +270,25 @@ export class PhoneScene {
       g.rotation.y = Math.PI;
       g.position.set(lens.position.x, lens.position.y, -D / 2 - 0.116);
       phone.add(g);
+    }
+
+    // True Tone flash & LiDAR scanner
+    const flash = new THREE.Mesh(
+      new THREE.CircleGeometry(0.042, 24),
+      new THREE.MeshPhysicalMaterial({ color: 0xf6e6b8, metalness: 0.3, roughness: 0.25, clearcoat: 1 })
+    );
+    flash.rotation.y = Math.PI;
+    const [fx, fy] = this.o.pro ? [-0.16, 0.19] : [-0.14, 0.14];
+    flash.position.set(bump.position.x + fx, bump.position.y + fy, -D / 2 - 0.062);
+    phone.add(flash);
+    if (this.o.pro) {
+      const lidar = new THREE.Mesh(
+        new THREE.CircleGeometry(0.042, 24),
+        new THREE.MeshPhysicalMaterial({ color: 0x141418, metalness: 0.85, roughness: 0.15, clearcoat: 1 })
+      );
+      lidar.rotation.y = Math.PI;
+      lidar.position.set(bump.position.x - 0.16, bump.position.y - 0.19, -D / 2 - 0.062);
+      phone.add(lidar);
     }
     // side buttons
     const btnMat = bodyMat;
@@ -351,6 +403,7 @@ export class PhoneScene {
     this.bodyMat.color.set(hex);
     this.backMat.color.set(hex);
     this.bumpMat.color.set(hex).multiplyScalar(0.85);
+    if (this.logoMat) this.logoMat.color.set(hex).lerp(new THREE.Color(0xffffff), 0.38);
   }
 
   updateScreen(screen) {
