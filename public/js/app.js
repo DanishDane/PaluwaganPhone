@@ -71,7 +71,8 @@ async function renderRoute() {
 
   // If setup required or not logged in
   if (state.meta?.needsSetup || !state.me) {
-    mascotEl.hidden = true;
+    piso.setFloating(true);
+    mascotEl.hidden = false;
     appEl.innerHTML = '<main class="auth-page"></main>';
     const page = appEl.querySelector('.auth-page');
     viewAuth(page, {

@@ -207,6 +207,11 @@ export function viewAuth(page, { needsSetup = false, onLogin }) {
           role = b.dataset.role;
           sfx.toggleSw(true);
           render();
+          if (role === 'seller') {
+            piso.say('Admin login: enter your username and password.', { mood: 'happy', duration: 3000 });
+          } else {
+            piso.say('Member portal: enter your mobile number and secret PIN!', { mood: 'grin', duration: 3000 });
+          }
         };
       });
 
@@ -302,7 +307,11 @@ export function viewAuth(page, { needsSetup = false, onLogin }) {
 
   render();
   piso.setTips([
+    { text: 'Hi! I\'m Piso. Choose Seller / Admin or Member Portal to sign in!', mood: 'happy' },
     { text: 'Sellers log in with their username and password.' },
     { text: 'Members can track their turns and payments with their phone number and secret PIN!', mood: 'grin' },
   ]);
+  setTimeout(() => {
+    piso.say('Welcome to PaluPhone! Click me anytime for help.', { mood: 'grin', duration: 3500 });
+  }, 1000);
 }
