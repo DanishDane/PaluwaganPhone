@@ -38,7 +38,7 @@ export function groupForm(existing = null) {
         <div class="fieldset-title mono">02 — The paluwagan</div>
         <div class="row2">
           <label class="field"><span>Total price (₱)</span><input name="price" type="number" inputmode="decimal" min="1" step="any" placeholder="30000" value="${g.price ?? ''}" required/></label>
-          <label class="field"><span>Members / months</span><input name="slots" type="number" inputmode="numeric" min="2" max="60" step="1" value="${g.slots ?? 12}" required/></label>
+          <label class="field"><span>Members / months</span><input name="slots" type="number" inputmode="numeric" min="2" max="50" step="1" value="${g.slots ?? 12}" required/></label>
         </div>
         <div class="row2">
           <label class="field"><span>Monthly hulog (₱)</span><input name="monthly" type="number" inputmode="decimal" min="1" step="any" placeholder="auto" value="${existing ? g.monthly : ''}"/></label>

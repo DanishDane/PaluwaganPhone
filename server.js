@@ -365,7 +365,7 @@ function readGroup(body, existing) {
     fine_per_day: num(body.fine_per_day ?? s.default_fine_per_day, 'Fine per day', { min: 0 }),
     notes: str(body.notes, 'Notes', { required: false, max: 1000 }),
   };
-  if (g.slots > 60) bad('Maximum of 60 members per group.');
+  if (g.slots > 50) bad('Maximum of 50 members per group.');
   if (g.grace_days > 28) bad('Grace period can be at most 28 days.');
   if (!isYm(g.start_month)) bad('Start month is required.');
   g.monthly = body.monthly ? num(body.monthly, 'Monthly payment', { min: 1 }) : L.round2(g.price / g.slots);
