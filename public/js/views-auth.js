@@ -33,10 +33,8 @@ export function viewAuth(page, { needsSetup = false, onLogin }) {
       <div class="auth-showcase">
         <div class="auth-showcase-top">
           <div class="auth-showcase-meta">
-            <span class="mono kicker light">Interactive 3D Preview</span>
             <b class="auth-finish-label">${esc(curFinish.name)}</b>
           </div>
-          <span class="auth-live-pill mono"><i></i>12-SLOT BATCH</span>
         </div>
 
         <div class="auth-3d-stage" id="auth3d">
@@ -50,12 +48,6 @@ export function viewAuth(page, { needsSetup = false, onLogin }) {
               <button type="button" class="auth-swatch ${idx === finishIdx ? 'on' : ''}" data-swatch="${idx}" style="--sw:${f.hex}" aria-label="${esc(f.name)}" title="${esc(f.name)}"></button>
             `).join('')}
           </div>
-        </div>
-
-        <div class="auth-pillars">
-          <div><span class="mono">GROUP SIZE</span><b>12 Slots / Batch</b></div>
-          <div><span class="mono">SCHEDULE</span><b>End of Month + 5d Grace</b></div>
-          <div><span class="mono">LEDGER</span><b>Verified Records</b></div>
         </div>
       </div>`;
 
