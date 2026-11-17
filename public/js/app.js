@@ -15,6 +15,7 @@ const appEl = document.getElementById('app');
 const mascotEl = document.getElementById('mascot-root');
 
 async function init() {
+  document.title = 'PaluPhone';
   wireGlobalSounds();
   piso.mount(mascotEl);
   if (localStorage.getItem('palu.piso.hidden') === '1') piso.show(false);
@@ -63,6 +64,7 @@ function logout() {
 }
 
 async function renderRoute() {
+  document.title = 'PaluPhone';
   if (!state.meta) return;
   disposeScenes();
   piso.hide();
