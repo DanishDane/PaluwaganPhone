@@ -71,3 +71,5 @@ A full-stack, responsive web application designed for iPhone Paluwagan businesse
 |---|---|---|---|
 | **Seller / Admin** | `admin` | `admin123` | Seeded development account only |
 | **Member** | `09171234501` | `1234` | Maria Santos (iPhone 11 Batch 1) |
+
+| **NEW ADD FEATURES **|
