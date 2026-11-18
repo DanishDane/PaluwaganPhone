@@ -73,3 +73,4 @@ A full-stack, responsive web application designed for iPhone Paluwagan businesse
 | **Member** | `09171234501` | `1234` | Maria Santos (iPhone 11 Batch 1) |
 
 | **NEW ADD FEATURES **|
+|CONTRACT AND SIGNATURE| 
